@@ -43,25 +43,22 @@ foreach ($m in 'PSFzf','Terminal-Icons','CompletionPredictor','posh-git') {
     } else { Info "модуль уже установлен: $m" }
 }
 
-# --- 3. Nerd Font (Meslo) + Windows Terminal ---
-Info "Устанавливаю Meslo Nerd Font"
-oh-my-posh font install meslo | Out-Null
+# --- 3. Nerd Font (Meslo): установка (в терминал прописывается в самом конце) ---
 $fontFace = 'MesloLGM Nerd Font'
-$wt = @(
-    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
-    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
-    "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if ($wt) {
-    try {
-        $data = Get-Content $wt -Raw | ConvertFrom-Json -AsHashtable
-        if (-not $data.profiles)          { $data.profiles = @{} }
-        if (-not $data.profiles.defaults) { $data.profiles.defaults = @{} }
-        $data.profiles.defaults.font = @{ face = $fontFace }
-        ($data | ConvertTo-Json -Depth 32) | Set-Content $wt -Encoding utf8
-        Info "Шрифт прописан в Windows Terminal: $fontFace"
-    } catch { Warn "Не смог отредактировать settings.json ($($_.Exception.Message)). Задай шрифт '$fontFace' вручную." }
-} else { Warn "settings.json Windows Terminal не найден — задай шрифт '$fontFace' вручную." }
+function Test-MesloInstalled {
+    foreach ($k in 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Fonts','HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts') {
+        $p = Get-ItemProperty $k -ErrorAction SilentlyContinue
+        if ($p -and ($p.PSObject.Properties.Name -match '^MesloLGM Nerd Font Regular')) { return $true }
+    }
+    return $false
+}
+$fontWasInstalled = Test-MesloInstalled
+if ($fontWasInstalled) {
+    Info "Шрифт $fontFace уже установлен"
+} else {
+    Info "Устанавливаю Meslo Nerd Font"
+    oh-my-posh font install meslo | Out-Null
+}
 
 # --- 4. Defender: исключение процесса oh-my-posh (ускоряет старт) ---
 try {
@@ -113,8 +110,42 @@ if ($clinkExe) {
     Write-Host "    clink installscripts `"$cg`""
 }
 
+# --- 8. Шрифт в Windows Terminal (последним шагом) ---
+$needReboot = -not $fontWasInstalled
+if ($needReboot) {
+    Write-Host ""
+    Write-Host "############################################################" -ForegroundColor Red
+    Write-Host "  Шрифт $fontFace установлен впервые." -ForegroundColor Red
+    Write-Host "  ПЕРЕЗАГРУЗИ ПК и не открывай терминал до перезагрузки:"   -ForegroundColor Red
+    Write-Host "  до неё Windows Terminal с новым шрифтом падает при старте." -ForegroundColor Red
+    Write-Host "############################################################" -ForegroundColor Red
+    Write-Host ""
+}
+$wtFiles = @(
+    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json",
+    "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json",
+    "$env:LOCALAPPDATA\Microsoft\Windows Terminal\settings.json"
+) | Where-Object { Test-Path $_ }
+if (-not $wtFiles) { Warn "settings.json Windows Terminal не найден — задай шрифт '$fontFace' в «Значения по умолчанию» вручную." }
+foreach ($wt in $wtFiles) {
+    try {
+        $bak = "$wt.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        Copy-Item $wt $bak -Force
+        $data = Get-Content $wt -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+        if (-not $data.profiles)          { $data.profiles = @{} }
+        if (-not $data.profiles.defaults) { $data.profiles.defaults = @{} }
+        $data.profiles.defaults.font = @{ face = $fontFace }
+        $json = $data | ConvertTo-Json -Depth 32
+        $null = $json | ConvertFrom-Json   # проверка, что результат валиден
+        Set-Content $wt -Value $json -Encoding utf8
+        Info "Шрифт прописан: $wt (копия: $bak)"
+    } catch {
+        Warn "Не смог отредактировать $wt ($($_.Exception.Message)). Файл не изменён, шрифт задай вручную."
+    }
+}
+
 Write-Host ""
-Info "Готово. Перезапусти PowerShell и CMD."
+if ($needReboot) { Warn "Готово. ПЕРЕЗАГРУЗИ ПК перед первым запуском терминала." } else { Info "Готово. Перезапусти PowerShell и CMD." }
 Warn "delta установлена, но как git-pager НЕ включена. Включить:"
 Write-Host "    git config --global core.pager delta"
 Write-Host "    git config --global interactive.diffFilter 'delta --color-only'"

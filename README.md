@@ -24,6 +24,10 @@ irm https://raw.githubusercontent.com/MikhailVMV/terminal-config/main/setup-wind
 ```
 Скрипт запросит UAC (нужно для Defender и шрифта). После — перезапустить PowerShell и CMD.
 
+**Первая установка на машине:** если шрифт Meslo ставится впервые, скрипт в конце попросит перезагрузить ПК. До перезагрузки Windows Terminal с новым шрифтом падает при старте, поэтому терминал не открывать. При повторных запусках (обновление конфига) перезагрузка не нужна.
+
+Перед правкой настроек Windows Terminal делается копия `settings.json.bak-<дата>` рядом с оригиналом.
+
 ### WSL / Linux (в оболочке WSL)
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MikhailVMV/terminal-config/main/setup-linux.sh | bash
